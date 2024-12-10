@@ -3,8 +3,10 @@
 
 from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB, CategoricalNB
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,58 +15,59 @@ import pandas as pd
 from IPython.display import display
 
 class NBVariants:
-    def __init__(self, df, target, categorical=None, numerical=None):
-        self.models = {
+    def __init__(self, df, target, models=None, categorical=None, numerical=None):
+        self.df = df
+        self.target = target
+        self.models = models or {
             'gaussian': GaussianNB(),
             'multinomial': MultinomialNB(),
             'bernoulli': BernoulliNB(),
         }
-        self.df = df
-        self.target = target
         self.cat_f = categorical
         self.num_f = numerical
+        
         self.scaler = StandardScaler()
         self.encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
 
-    def __f_fit(self, X_in):
+    def f_fit(self, X_in):
         """
-        Fit scaler and encoder
+        Fit features to scaler and encoder
         """
         if self.num_f: self.scaler.fit(X_in[self.num_f])
         if self.cat_f: self.encoder.fit(X_in[self.cat_f])
 
-    def __f_transform(self, X_in):
+    def f_transform(self, X_in):
         """
-        Apply scaler and encoder to transform X variable
+        Apply scaler and encoder to transform features
         """
         X_num = self.scaler.transform(X_in[self.num_f])
         X_cat = self.encoder.transform(X_in[self.cat_f])
         return np.column_stack([X_num, X_cat])
         
-    def getXy(self, data):
-        """
-        Obtain corresponding X and y for a dataframe
-        """
-        self.__f_fit(data.drop(columns=[self.target]))
-        X = self.__f_transform(data.drop(columns=[self.target]))
-        y = data[self.target].values
-        return X, y
-        
     def train_models(self, test_size=0.2, random_state=None):
         """
         Train multiple NB models
         """
-        df_train, df_test = train_test_split(self.df, test_size=test_size, random_state=random_state)
-        X_train, y_train = self.getXy(df_train)
-        X_val, y_val = self.getXy(df_train)
+        df_train, df_val = train_test_split(self.df, test_size=test_size, random_state=random_state)
+
+        for data in [df_train, df_val]:
+            data.reset_index(drop=True)
+
+        y_train = df_train[self.target].values
+        y_val = df_val[self.target].values
+
+        X_train = df_train.drop(columns=[self.target])
+        X_val = df_val.drop(columns=[self.target])
+
+        self.f_fit(X_train)
+        X_train = self.f_transform(X_train)
+        X_val = self.f_transform(X_val)
 
         results = {}
         for name, model in self.models.items():
             if name == 'multinomial':
                 # Ensure all values are non-negative for MultinomialNB
                 X_train = X_train - X_train.min()
-            else:
-                X_train = X_train
                 
             model.fit(X_train, y_train)
             y_pred = model.predict(X_val)
@@ -101,3 +104,54 @@ class NBVariants:
             
         plt.tight_layout()
         plt.show()
+    
+class ParamsTuning:
+    def __init__(self, df, target, numerical, categorical):
+        self.df = df
+        self.num = numerical
+        self.cat = categorical
+        self.target = target
+        
+    def grid_search(self, model, param_grid, 
+                    n_splits=10, n_jobs=-1, n_iter = 50,
+                    scoring='accuracy', verbose=0):
+        
+        # initialize pipeline
+        self.__create_pipeline(model)
+
+        # get features and target
+        y = self.df[self.target].values
+        X = self.df.drop(columns=[self.target])
+
+        # create a grid search
+        search = GridSearchCV(
+            self.pipeline,
+            param_grid,
+            cv=n_splits,
+            scoring=scoring,
+            n_jobs=n_jobs,
+            verbose=verbose,
+        )
+
+        # fit the values to grid search
+        search.fit(X, y)
+        return search
+        
+    def __create_pipeline(self, model) -> None:
+        """
+        Features transforming
+        """
+        num_transformer = Pipeline(steps=[('scaler', StandardScaler())])
+        cat_transformer = Pipeline(steps=[('onehot', OneHotEncoder(sparse_output=False, handle_unknown='ignore'))])
+
+        f_preprocessor = ColumnTransformer(
+            transformers=[
+                ('num', num_transformer, self.num),
+                ('cat', cat_transformer, self.cat)
+            ]
+        )
+
+        self.pipeline = Pipeline([
+            ('preprocessor', f_preprocessor),
+            ('classifier', model)
+        ])
