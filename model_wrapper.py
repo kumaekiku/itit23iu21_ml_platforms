@@ -4,7 +4,7 @@
 from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB, CategoricalNB
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
+from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder, FunctionTransformer, MinMaxScaler
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 
@@ -15,7 +15,7 @@ import pandas as pd
 from IPython.display import display
 
 class NBVariants:
-    def __init__(self, df, target, models=None, categorical=None, numerical=None):
+    def __init__(self, df, target, models:dict=None, categorical=None, numerical=None):
         self.df = df
         self.target = target
         self.models = models or {
@@ -136,12 +136,19 @@ class ParamsTuning:
         # fit the values to grid search
         search.fit(X, y)
         return search
-        
+
     def __create_pipeline(self, model) -> None:
         """
         Features transforming
         """
-        num_transformer = Pipeline(steps=[('scaler', StandardScaler())])
+        if isinstance(model, MultinomialNB):
+            num_transformer = Pipeline(steps=[
+                ('shift', FunctionTransformer(lambda X: X-X.min()+1e-10, validate=True)),
+                ('scaler', MinMaxScaler()) # recommended for Multinomial NB
+            ])
+        else:
+            num_transformer = Pipeline(steps=[('scaler', StandardScaler())])
+            
         cat_transformer = Pipeline(steps=[('onehot', OneHotEncoder(sparse_output=False, handle_unknown='ignore'))])
 
         f_preprocessor = ColumnTransformer(
