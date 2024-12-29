@@ -4,11 +4,11 @@ WORKDIR /predict_app
 
 COPY ./requirements.txt ./
 
-COPY ./HR_comma_sep.csv ./
+COPY ./dataset.csv ./
 
 RUN pip install --upgrade pip
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 COPY ["train.py", "model_wrapper.py","predict.py", "./"]
 
