@@ -4,7 +4,7 @@ WORKDIR /predict_app
 
 COPY ./requirements.txt ./
 
-COPY ./dataset.csv ./
+COPY ./data/train_data.csv ./data/
 
 RUN pip install --upgrade pip
 

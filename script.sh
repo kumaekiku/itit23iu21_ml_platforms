@@ -10,6 +10,7 @@ if [ $option -eq 1 ]; then
     echo 'Train and export model...'
     python3 ./train.py
     echo 'Deploying model with Flask-app...'
+    python3 ./predict.py
 
 elif [ $option -eq 2 ]; then
     echo 'Building docker image...'
